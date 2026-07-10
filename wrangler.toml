@@ -27,7 +27,7 @@ MAX_TG_FILE_BYTES = "20971520"
 [[d1_databases]]
 binding = "DB"
 database_name = "attest-bot"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "5d71784a-bd99-4a5b-98a6-22decd5dfa5a"
 
 # Cloudflare secrets (mai in questo file, mai nel repo):
 #   TELEGRAM_BOT_TOKEN        token del bot da BotFather

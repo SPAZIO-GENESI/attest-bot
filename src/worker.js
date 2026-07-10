@@ -314,11 +314,20 @@ async function checkArchive(env, hash) {
 // re-inventate, solo applicate a una sorgente di frammenti diversa.
 // ⚠️ Da validare con un certificato reale in FASE 2 (vedi P23-DESIGN §6).
 
-// Estrae le stringhe letterali "(...)" da un content stream PDF decodificato
-// (operandi di Tj/TJ). Non è un parser PDF completo: gestisce solo l'escaping
-// più comune (\(, \), \\, \n, \r, \t) — sufficiente per testo WinAnsi semplice
-// come quello disegnato da imgauth (niente ottali: cleanMeta già filtra i
-// caratteri non stampabili prima della firma).
+// Estrae le stringhe di testo da un content stream PDF decodificato (operandi
+// di Tj/TJ), in ENTRAMBE le sintassi PDF: letterali tra parentesi "(...)" ED
+// esadecimali "<...>". Non è un parser PDF completo: gestisce solo l'escaping
+// più comune per le letterali (\(, \), \\, \n, \r, \t) — sufficiente per
+// testo WinAnsi semplice come quello disegnato da imgauth (niente ottali:
+// cleanMeta già filtra i caratteri non stampabili prima della firma).
+// ⚠️ Scoperto testando un certificato reale (2026-07-10): pdf-lib disegna il
+// testo runtime (footer, "Firma HMAC", metadati) usando la sintassi
+// ESADECIMALE, non quella tra parentesi — la prima versione di questa
+// funzione (solo parentesi) non trovava MAI nulla nei certificati veri.
+// Le stringhe esadecimali del font composito del template originale (CID,
+// 2 byte/carattere) vengono comunque decodificate byte-per-byte: producono
+// frammenti illeggibili che però non generano falsi positivi nelle regex
+// mirate di parseCertFragments, quindi non serve distinguerle.
 function extractLiteralStrings(bytes) {
   const CHUNK = 8192;
   let text = "";
@@ -327,27 +336,42 @@ function extractLiteralStrings(bytes) {
   const out = [];
   let i = 0;
   while (i < text.length) {
-    if (text[i] !== "(") { i++; continue; }
-    let depth = 1, j = i + 1, buf = "";
-    while (j < text.length && depth > 0) {
-      const c = text[j];
-      if (c === "\\") {
-        const n = text[j + 1];
-        if (n === "n") buf += "\n";
-        else if (n === "r") buf += "\r";
-        else if (n === "t") buf += "\t";
-        else if (n === "(" || n === ")" || n === "\\") buf += n;
-        else buf += n ?? "";
-        j += 2;
-        continue;
+    if (text[i] === "(") {
+      let depth = 1, j = i + 1, buf = "";
+      while (j < text.length && depth > 0) {
+        const c = text[j];
+        if (c === "\\") {
+          const n = text[j + 1];
+          if (n === "n") buf += "\n";
+          else if (n === "r") buf += "\r";
+          else if (n === "t") buf += "\t";
+          else if (n === "(" || n === ")" || n === "\\") buf += n;
+          else buf += n ?? "";
+          j += 2;
+          continue;
+        }
+        if (c === "(") depth++;
+        else if (c === ")") { depth--; if (depth === 0) { j++; break; } }
+        buf += c;
+        j++;
       }
-      if (c === "(") depth++;
-      else if (c === ")") { depth--; if (depth === 0) { j++; break; } }
-      buf += c;
+      out.push(buf);
+      i = j;
+    } else if (text[i] === "<" && text[i + 1] !== "<") {
+      // Stringa esadecimale PDF: whitespace interno ignorato, nibble finale
+      // dispari implicitamente 0 (spec PDF 7.3.4.3). "<<" apre un dizionario,
+      // non una stringa: escluso dal check sul carattere successivo.
+      let j = i + 1, hex = "";
+      while (j < text.length && text[j] !== ">") { if (!/\s/.test(text[j])) hex += text[j]; j++; }
       j++;
+      if (hex.length % 2 === 1) hex += "0";
+      let buf = "";
+      for (let k = 0; k < hex.length; k += 2) buf += String.fromCharCode(parseInt(hex.slice(k, k + 2), 16));
+      out.push(buf);
+      i = j;
+    } else {
+      i++;
     }
-    out.push(buf);
-    i = j;
   }
   return out;
 }
@@ -371,7 +395,11 @@ async function extractPdfFragments(bytes) {
   for (const [, obj] of pdfDoc.context.enumerateIndirectObjects()) {
     if (!(obj instanceof PDFRawStream)) continue;
     const filter = obj.dict.get(PDFName.of("Filter"));
-    const filterName = filter && typeof filter.asString === "function" ? filter.asString() : null;
+    // ⚠️ PDFName.asString() include lo slash iniziale ("/FlateDecode", non
+    // "FlateDecode") — bug reale scoperto testando un certificato vero (2026-07-10):
+    // il confronto senza normalizzazione non faceva mai match, ogni stream
+    // veniva scartato in silenzio e l'estrazione falliva sempre.
+    const filterName = (filter && typeof filter.asString === "function" ? filter.asString() : "").replace(/^\//, "");
     const raw = typeof obj.getContents === "function" ? obj.getContents() : obj.contents;
     if (!raw || raw.length > 2 * 1024 * 1024) continue; // difesa CPU: stream anomali fuori scope
     let decoded;
@@ -555,19 +583,10 @@ async function handleVerifyArchiveCheckFile(env, message) {
     : `⚪ Nessuna attestazione in archivio per questo file.\nImpronta: ${sha256}`);
 }
 
-async function handleCertificatePdf(env, message, bytes) {
+// Chiamata SOLO dopo che extractCertFromPdfBytes ha già trovato un'impronta:
+// qui il PDF è già classificato come "uno dei nostri certificati".
+async function handleCertificatePdfParsed(env, message, extracted) {
   const chatId = message.chat.id, userId = message.from.id;
-  let extracted;
-  try {
-    extracted = await extractCertFromPdfBytes(bytes);
-  } catch {
-    extracted = null;
-  }
-  if (!extracted) {
-    await sendMessage(env, chatId, "Non sembra un nostro certificato: non trovo un'impronta valida in questo PDF.");
-    return;
-  }
-
   await setVerifyExpect(env, userId, extracted.hash, Date.now() + VERIFY_WINDOW_MS);
   const certUrl = `${env.CERT_SITE_BASE_URL}/c/${extracted.hash}`;
 
@@ -603,23 +622,35 @@ async function handleCertificatePdf(env, message, bytes) {
   await sendMessage(env, chatId, "🔴 La firma NON è valida: il certificato risulta alterato o non è nostro.");
 }
 
-async function handleIncomingPdf(env, message) {
+// Un PDF può essere un NOSTRO certificato (da verificare) oppure un file
+// qualunque che l'utente vuole attestare/verificare (un comunicato, un
+// contratto, un ebook...). Si tenta prima l'estrazione; solo se il PDF non è
+// uno dei nostri certificati si ripiega sul percorso normale (attest/verify)
+// — mai un vicolo cieco "non sembra un nostro certificato" per un PDF
+// qualsiasi che l'utente voleva semplicemente attestare (bug di design
+// corretto il 2026-07-10 dopo un test reale: la bozza originale trattava
+// OGNI PDF come candidato certificato, vedi P23-DESIGN §4.4).
+// Ritorna true se il messaggio è stato gestito (era un nostro certificato),
+// false se il chiamante deve procedere col percorso normale.
+async function tryHandleAsCertificate(env, message) {
   const chatId = message.chat.id, userId = message.from.id, doc = message.document;
   const maxBytes = Number(env.MAX_TG_FILE_BYTES || 20971520);
-  if (doc.file_size && doc.file_size > maxBytes) {
-    await sendMessage(env, chatId, "Questo PDF supera i 20 MB: non riesco a leggerlo da qui.");
-    return;
-  }
-  if (!(await verifyQuotaOk(env, chatId, userId))) return;
+  if (doc.file_size && doc.file_size > maxBytes) return false; // il percorso normale lo segnalerà comunque
 
   let bytes;
   try {
     bytes = await downloadBytes(env, doc.file_id);
   } catch {
-    await sendMessage(env, chatId, "Non sono riuscito a scaricare il PDF da Telegram. Riprova.");
-    return;
+    return false; // il percorso normale riproverà il download (streaming) e segnalerà l'errore
   }
-  await handleCertificatePdf(env, message, bytes);
+
+  let extracted;
+  try { extracted = await extractCertFromPdfBytes(bytes); } catch { extracted = null; }
+  if (!extracted) return false;
+
+  if (!(await verifyQuotaOk(env, chatId, userId))) return true; // quota di verifica esaurita: non ripiegare su attest
+  await handleCertificatePdfParsed(env, message, extracted);
+  return true;
 }
 
 // ── Comandi ──────────────────────────────────────────────────────────────
@@ -693,7 +724,7 @@ async function handleCommand(env, message) {
 
 async function handleDocumentMessage(env, message) {
   const userId = message.from.id, doc = message.document;
-  if (doc.mime_type === "application/pdf") return handleIncomingPdf(env, message);
+  if (doc.mime_type === "application/pdf" && (await tryHandleAsCertificate(env, message))) return;
 
   const user = await getOrCreateUser(env, userId);
   const now = Date.now();
