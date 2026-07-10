@@ -1,0 +1,38 @@
+name = "attest-bot"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+
+# Nessuna route zone, nessun custom domain: solo Telegram deve raggiungere
+# questo Worker. Si usa il workers.dev di default (URL stabile assegnato da
+# Cloudflare) per evitare in radice la trappola delle route zone nuove
+# (memoria imgauth-wrangler-routes-trap: wrangler deploy non le crea da solo).
+workers_dev = true
+
+# Pulizia giornaliera: elimina bot_usage oltre 90gg, azzera pending_cert/
+# verify_expect scaduti (minimizzazione dati, vedi P23-DESIGN §4.6).
+[triggers]
+crons = ["17 3 * * *"]
+
+[vars]
+IMGAUTH_BASE_URL = "https://imgauth.spaziogenesi.org"
+CERT_SITE_BASE_URL = "https://attestazione.spaziogenesi.org"
+BOT_DAILY_ATTEST_LIMIT = "5"
+BOT_DAILY_VERIFY_LIMIT = "20"
+MAX_TG_FILE_BYTES = "20971520"
+
+# D1: accettazione dell'avvertenza, modo corrente, contatori d'uso giornalieri.
+# Nessun byte di file salvato qui (vedi schema/bot.sql). Binding `DB`.
+# FASE 0/1: crea il database con `wrangler d1 create attest-bot` e incolla qui
+# il database_id restituito (placeholder finché non esiste).
+[[d1_databases]]
+binding = "DB"
+database_name = "attest-bot"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# Cloudflare secrets (mai in questo file, mai nel repo):
+#   TELEGRAM_BOT_TOKEN        token del bot da BotFather
+#   TELEGRAM_WEBHOOK_SECRET   stringa casuale confrontata con l'header
+#                             X-Telegram-Bot-Api-Secret-Token (anti-spoofing webhook)
+#   IMGAUTH_API_KEY           chiave sg_k_… dedicata, emessa da imgauth /admin
+#                             (label "telegram-bot"), bypassa il solo Turnstile
+# In locale: .dev.vars (verificare che sia in .gitignore PRIMA di scriverci).

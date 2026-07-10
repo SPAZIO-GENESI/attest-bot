@@ -1,0 +1,5 @@
+# Copia in .dev.vars (mai committato) e compila con un bot di TEST creato da
+# BotFather — mai il bot di produzione (vedi P23-DESIGN §3 e §6 FASE 0).
+TELEGRAM_BOT_TOKEN=123456:ABC-test-bot-token-from-botfather
+TELEGRAM_WEBHOOK_SECRET=una-stringa-casuale-a-piacere-usata-solo-in-locale
+IMGAUTH_API_KEY=sg_k_xxxxxxxx_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

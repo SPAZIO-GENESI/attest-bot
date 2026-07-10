@@ -1,0 +1,28 @@
+{
+  "name": "attest-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for Spazio Genesi's attestation service — attest, verify, and recover certificates from chat (declared convenience channel; the website remains the full-privacy channel).",
+  "main": "src/worker.js",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SPAZIO-GENESI/attest-bot.git"
+  },
+  "keywords": [
+    "telegram-bot",
+    "attestation",
+    "sha256",
+    "proof-of-existence"
+  ],
+  "author": "Spazio Genesi ETS",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/SPAZIO-GENESI/attest-bot/issues"
+  },
+  "homepage": "https://github.com/SPAZIO-GENESI/attest-bot#readme",
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  }
+}
