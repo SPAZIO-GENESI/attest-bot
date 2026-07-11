@@ -3,6 +3,9 @@
 Bot Telegram di attestazione e verifica per [Spazio Genesi ETS](https://spaziogenesi.org) —
 [attestazione.spaziogenesi.org](https://attestazione.spaziogenesi.org).
 
+**In produzione**: [@SGAttestBot](https://t.me/SGAttestBot) su
+`https://attest-bot.it-e3f.workers.dev`.
+
 **Canale comodità, non il canale a privacy totale.** Dal sito, il file che attesti
 non lascia mai il tuo dispositivo (l'impronta si calcola nel browser). Qui su
 Telegram, il file che invii al bot **transita** per i server di Telegram e per
