@@ -45,6 +45,13 @@ Vedi `test/run-local.md` per iniettare update di Telegram finti via curl senza
 un vero webhook in ingresso (l'uscita usa comunque il bot Telegram reale
 indicato in `.dev.vars`: i messaggi arrivano davvero in chat).
 
+## Sicurezza
+
+Segnalazioni di vulnerabilità → [`/sicurezza/`](https://attestazione.spaziogenesi.org/sicurezza/)
+(policy di responsible disclosure, safe harbor per la ricerca in buona fede) —
+questo repo non ha un `security.txt` proprio (nessun asset statico, è un
+Worker webhook), la policy copre comunque i servizi workers.dev del progetto.
+
 ## Licenza
 
 MIT — vedi [LICENSE](LICENSE).
