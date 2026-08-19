@@ -703,7 +703,11 @@ async function cmdStato(env, chatId) {
 
 async function handleCommand(env, message) {
   const chatId = message.chat.id, userId = message.from.id;
-  const [rawCmd, ...rest] = message.text.trim().split(/\s+/);
+  // split su \s singolo + filter invece di /\s+/: semantica identica (trim()
+  // toglie gli estremi, filter le stringhe vuote fra separatori consecutivi) ma
+  // senza quantificatore, quindi senza backtracking possibile su un testo che
+  // arriva da un canale esterno non fidato. P54/F3.
+  const [rawCmd, ...rest] = message.text.trim().split(/\s/).filter(Boolean);
   const cmd = rawCmd.replace(/@.*$/, "").toLowerCase();
   const arg = rest.join(" ").trim();
 
