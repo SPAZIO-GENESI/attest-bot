@@ -708,7 +708,13 @@ async function handleCommand(env, message) {
   // senza quantificatore, quindi senza backtracking possibile su un testo che
   // arriva da un canale esterno non fidato. P54/F3.
   const [rawCmd, ...rest] = message.text.trim().split(/\s/).filter(Boolean);
-  const cmd = rawCmd.replace(/@.*$/, "").toLowerCase();
+  // split("@", 1)[0] invece di replace(/@.*$/, ""): stessa semantica (taglia
+  // al primo "@", per i comandi con menzione del bot tipo /stato@NomeBot) ma
+  // senza regex, quindi senza superficie ReDoS su un testo che arriva da un
+  // canale esterno non fidato. Chiude l'alert #1 di code scanning (era ancora
+  // aperto dopo P54/F3: quel fix aveva corretto lo split sopra, non questa
+  // riga — il messaggio dell'alert puntava a questa regex). P54/F9.
+  const cmd = rawCmd.split("@", 1)[0].toLowerCase();
   const arg = rest.join(" ").trim();
 
   switch (cmd) {
